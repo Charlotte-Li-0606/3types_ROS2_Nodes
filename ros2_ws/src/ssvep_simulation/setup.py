@@ -26,6 +26,7 @@ setup(
             "eeg_driver = ssvep_simulation.eeg_driver:main",
             "linux_eeg_driver = ssvep_simulation.linux_eeg_driver:main",
             "ssvep_stimulus = ssvep_simulation.ssvep_stimulus:main",
+            "ssvep_visual_stimulus = ssvep_simulation.ssvep_visual_stimulus:main",
             "ssvep_decoder = ssvep_simulation.ssvep_decoder:main",
             "turtlesim_bridge = ssvep_simulation.turtlesim_bridge:main",
         ],

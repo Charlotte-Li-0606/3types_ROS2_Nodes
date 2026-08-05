@@ -90,6 +90,21 @@ cd ..
 ros2 launch ssvep_simulation turtlesim_real_eeg.launch.py
 ```
 
+实机 launch 会同时打开一个四目标 SSVEP 视觉窗口和 turtlesim。视觉窗口默认暂停，
+此时 decoder 发布无效的 `idle` 指令，turtle 保持停止。开始录像并佩戴好 EEG 后，
+在视觉窗口按 `SPACE` 或点击 `START FLASHING`：
+
+| 注视目标 | 解码指令 |
+| --- | --- |
+| `10 Hz / FORWARD` | forward |
+| `14 Hz / BACKWARD` | backward |
+| `18 Hz / LEFT` | left |
+| `22 Hz / RIGHT` | right |
+
+按 `ESC` 或再次按 `SPACE` 会暂停闪烁并停止 turtle。快速闪光可能引起光敏反应；有
+光敏性癫痫风险的人不要运行视觉刺激。软件目标频率由单调时钟生成，但正式实验仍应使用
+光电二极管测量显示器实际刷新时序，不能把未测量的显示时序当作临床级校准结果。
+
 默认扫描名称以 `VIS_BCI_` 开头的设备。也可以指定完整名称或 BlueZ 地址：
 
 ```bash

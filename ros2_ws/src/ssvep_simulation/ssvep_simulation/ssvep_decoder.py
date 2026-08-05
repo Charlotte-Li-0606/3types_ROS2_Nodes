@@ -27,6 +27,9 @@ class SSVEPDecoder(Node):
         self._min_confidence = float(
             self.declare_parameter("min_confidence", 0.40).value
         )
+        self._require_active_stimulus = bool(
+            self.declare_parameter("require_active_stimulus", False).value
+        )
         self._frequencies = [10.0, 14.0, 18.0, 22.0]
         self._direction_by_frequency = {
             10.0: "forward",
@@ -65,7 +68,9 @@ class SSVEPDecoder(Node):
 
         message = (
             f"started; window={self._window_seconds:.1f}s; "
-            f"targets={self._frequencies}; log={self._log_path}"
+            f"targets={self._frequencies}; "
+            f"require_active_stimulus={self._require_active_stimulus}; "
+            f"log={self._log_path}"
         )
         self.get_logger().info(message)
         self._file_logger.info(message)
@@ -100,6 +105,20 @@ class SSVEPDecoder(Node):
 
     def _analyze(self):
         if len(self._samples) < self._max_samples:
+            return
+
+        stimulus_active = bool(
+            self._last_stimulus and self._last_stimulus[2]
+        )
+        if self._require_active_stimulus and not stimulus_active:
+            command = SSVEPCommand()
+            command.header.stamp = self.get_clock().now().to_msg()
+            command.header.frame_id = "ssvep_decoder"
+            command.direction = "idle"
+            command.detected_frequency = 0.0
+            command.confidence = 0.0
+            command.valid = False
+            self._command_publisher.publish(command)
             return
 
         eeg = np.asarray(self._samples, dtype=float)

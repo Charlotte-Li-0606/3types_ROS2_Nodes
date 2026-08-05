@@ -20,6 +20,12 @@ linux_eeg_driver:
     data_file: logs/eeg_latest.txt
     log_file: logs/runtime/linux_eeg_driver.log.txt
 
+ssvep_visual_stimulus:
+  ros__parameters:
+    start_active: false
+    geometry: "760x760+20+100"
+    render_interval_ms: 4
+
 ssvep_stimulus:
   ros__parameters:
     auto_cycle: true
@@ -33,4 +39,5 @@ ssvep_decoder:
     window_seconds: 3.0
     analysis_period: 0.5
     min_confidence: 0.40
+    require_active_stimulus: false
     log_file: logs/runtime/ssvep_simulation.log.txt

@@ -56,6 +56,19 @@ def generate_launch_description():
                 description="Decoder and turtlesim bridge runtime log",
             ),
             Node(
+                package="ssvep_simulation",
+                executable="ssvep_visual_stimulus",
+                name="ssvep_visual_stimulus",
+                output="screen",
+                parameters=[
+                    {
+                        "start_active": False,
+                        "geometry": "760x760+20+100",
+                        "render_interval_ms": 4,
+                    }
+                ],
+            ),
+            Node(
                 package="turtlesim",
                 executable="turtlesim_node",
                 name="turtlesim",
@@ -91,6 +104,7 @@ def generate_launch_description():
                         "window_seconds": 3.0,
                         "analysis_period": 0.5,
                         "min_confidence": 0.40,
+                        "require_active_stimulus": True,
                         "log_file": pipeline_log_file,
                     }
                 ],

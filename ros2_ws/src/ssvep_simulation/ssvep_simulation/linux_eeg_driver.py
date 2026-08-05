@@ -356,11 +356,18 @@ class LinuxEEGDriver(Node):
                 level, message = self._status_queue.get_nowait()
             except Empty:
                 break
-            file_log = getattr(self._file_logger, level, self._file_logger.info)
-            if rclpy.ok():
-                ros_log = getattr(self.get_logger(), level, self.get_logger().info)
-                ros_log(message)
-            file_log(message)
+            if level == "error":
+                if rclpy.ok():
+                    self.get_logger().error(message)
+                self._file_logger.error(message)
+            elif level == "warning":
+                if rclpy.ok():
+                    self.get_logger().warning(message)
+                self._file_logger.warning(message)
+            else:
+                if rclpy.ok():
+                    self.get_logger().info(message)
+                self._file_logger.info(message)
 
         while True:
             try:
@@ -384,7 +391,8 @@ class LinuxEEGDriver(Node):
         message.channel_count = CHANNEL_COUNT
         message.samples_per_channel = SAMPLES_PER_PACKET
         message.values = flatten_sample_major(samples)
-        self._publisher.publish(message)
+        if rclpy.ok():
+            self._publisher.publish(message)
 
         for sample_index, channels in enumerate(samples):
             sample_time = first_sample_wall + sample_index / SAMPLING_RATE
@@ -414,10 +422,11 @@ class LinuxEEGDriver(Node):
                     measured_rate,
                     self._total_samples,
                 )
-                self.get_logger().info(
-                    f"sampling rate measured {measured_rate:.2f} Hz; "
-                    f"total_samples={self._total_samples}"
-                )
+                if rclpy.ok():
+                    self.get_logger().info(
+                        f"sampling rate measured {measured_rate:.2f} Hz; "
+                        f"total_samples={self._total_samples}"
+                    )
                 self._last_rate_report = received_monotonic
 
     def stop(self):
