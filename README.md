@@ -61,6 +61,54 @@ ros2 topic echo /ssvep/command
 ros2 topic echo /ssvep/quality
 ```
 
+## 脑控 turtlesim Demo
+
+这个 Demo 用 ROS2 自带的二维小乌龟验证脑控链路。当前的 EEG_Driver 仍然生成
+模拟 EEG，后面接入真实 VisionBCI 时，只需要替换 EEG_Driver，解码器和小乌龟桥接
+接口可以继续使用。
+
+```text
+SSVEP_Decoder -- /ssvep/command --> turtlesim_bridge
+                                      |
+                                      +-- /turtle1/cmd_vel --> turtlesim
+```
+
+`turtlesim_bridge` 将识别结果转换为标准 `geometry_msgs/msg/Twist`：
+
+| SSVEP 指令 | `Twist` 输出 |
+| --- | --- |
+| `forward` | `linear.x = +1.0` |
+| `backward` | `linear.x = -1.0` |
+| `left` | `angular.z = +1.2` |
+| `right` | `angular.z = -1.2` |
+| `idle`、无效或超时 | 速度全为 0 |
+
+在 Ubuntu 22.04 + ROS2 Humble 中安装并运行：
+
+```bash
+sudo apt update
+sudo apt install ros-humble-turtlesim
+cd ~/3types_ROS2_Nodes/ros2_ws
+source /opt/ros/humble/setup.bash
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install
+source install/setup.bash
+cd ..
+ros2 launch ssvep_simulation turtlesim_demo.launch.py
+```
+
+另开终端查看脑控指令和速度：
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/3types_ROS2_Nodes/ros2_ws/install/setup.bash
+ros2 topic echo /ssvep/command
+ros2 topic echo /turtle1/cmd_vel
+```
+
+桥接节点以 10 Hz 发布速度，并在 1 秒内没有收到有效指令时自动停车。
+这使得解码器约 2 Hz 的判断频率不会让小乌龟出现跳跃式移动。
+
 手动切换刺激时，可以向 `/ssvep/stimulus/select` 发布一个 JSON 字符串，例如：
 
 ```bash

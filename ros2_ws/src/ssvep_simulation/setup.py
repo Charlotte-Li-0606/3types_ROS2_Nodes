@@ -9,7 +9,13 @@ setup(
     data_files=[
         ("share/ament_index/resource_index/packages", [f"resource/{package_name}"]),
         (f"share/{package_name}", ["package.xml"]),
-        (f"share/{package_name}/launch", ["launch/simulation.launch.py"]),
+        (
+            f"share/{package_name}/launch",
+            [
+                "launch/simulation.launch.py",
+                "launch/turtlesim_demo.launch.py",
+            ],
+        ),
         (f"share/{package_name}/config", ["config/default.yaml"]),
     ],
     install_requires=["setuptools", "numpy"],
@@ -19,6 +25,7 @@ setup(
             "eeg_driver = ssvep_simulation.eeg_driver:main",
             "ssvep_stimulus = ssvep_simulation.ssvep_stimulus:main",
             "ssvep_decoder = ssvep_simulation.ssvep_decoder:main",
+            "turtlesim_bridge = ssvep_simulation.turtlesim_bridge:main",
         ],
     },
 )
