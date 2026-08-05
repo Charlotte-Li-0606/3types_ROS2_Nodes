@@ -1,0 +1,23 @@
+eeg_driver:
+  ros__parameters:
+    sampling_rate: 250.0
+    channel_count: 8
+    frame_samples: 10
+    signal_amplitude: 1.0
+    noise_std: 0.35
+    log_file: logs/runtime/ssvep_simulation.log.txt
+
+ssvep_stimulus:
+  ros__parameters:
+    auto_cycle: true
+    cycle_seconds: 6.0
+    frequency: 10.0
+    mode: forward
+    log_file: logs/runtime/ssvep_simulation.log.txt
+
+ssvep_decoder:
+  ros__parameters:
+    window_seconds: 3.0
+    analysis_period: 0.5
+    min_confidence: 0.40
+    log_file: logs/runtime/ssvep_simulation.log.txt

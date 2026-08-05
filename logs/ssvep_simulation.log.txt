@@ -1,0 +1,11 @@
+SSVEP ROS2 simulation offline smoke-test log
+Runtime ROS2 logs are written to logs/runtime/ssvep_simulation.log.txt.
+2026-08-04T15:22:00 [INFO] package layout and Python syntax check passed
+2026-08-04T15:22:01 [INFO] EEG_Driver model: 8 channels, sampling_rate=250 Hz, window=3.0 s
+2026-08-04T15:22:01 [INFO] SSVEP_Stimulus candidates: 10, 14, 18, 22 Hz
+2026-08-04T15:22:01 [INFO] SSVEP_Decoder: FBCCA-style NumPy scoring enabled
+2026-08-04T15:22:01 [INFO] input=10.0 Hz winner=10.0 Hz snr_db=6.77 quality=good
+2026-08-04T15:22:01 [INFO] input=14.0 Hz winner=14.0 Hz snr_db=6.81 quality=good
+2026-08-04T15:22:01 [INFO] input=18.0 Hz winner=18.0 Hz snr_db=6.77 quality=good
+2026-08-04T15:22:01 [INFO] input=22.0 Hz winner=22.0 Hz snr_db=6.84 quality=good
+2026-08-04T15:22:02 [WARN] ROS2 runtime build not executed on this machine: ROS2 Humble is not installed
