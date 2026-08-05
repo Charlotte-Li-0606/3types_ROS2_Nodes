@@ -1,0 +1,116 @@
+Linux Humble Real EEG Migration - Edit and Test Log
+Date: 2026-08-05
+Branch: linux-humble-real-eeg
+Base: origin/main 27746033d6a353ffb15e1fbfde84dc2d6b2609be
+
+ENVIRONMENT
+Host OS: Ubuntu 24.04.4 LTS
+Host ROS_DISTRO: jazzy
+Host Python: 3.12.3
+Host Bluetooth service: active
+Host bluetoothctl / BlueZ client: 5.72
+
+Authorized test environment: official ros:humble-ros-base-jammy Docker image
+Container OS: Ubuntu 22.04.5 LTS
+Container ROS_DISTRO: humble
+Container Python: 3.10.12
+Container Bleak: 3.0.2
+Container bluetoothctl / BlueZ client: 5.64
+Bluetooth daemon used by Bleak: active host BlueZ daemon through system D-Bus
+
+IMPLEMENTATION
+- Added a Linux-only VisionBCI driver using Python Bleak and BlueZ.
+- Added confirmed service/configuration/notification UUID validation.
+- Added signed 24-bit big-endian packet parsing for data[2:122].
+- Preserved 5 sample x 8 channel sample-major order and scale factor 0.02235.
+- Added /eeg/raw EEGFrame publication with sampling_rate=250.0.
+- Added overwrite-on-run logs/eeg_latest.txt with timestamp and EEG_1..EEG_8.
+- Added logs/runtime/linux_eeg_driver.log.txt runtime diagnostics.
+- Added turtlesim_real_eeg.launch.py without the simulated stimulus/EEG nodes.
+- Preserved the simulated EEG launch and FBCCA decoder.
+- Preserved the 10/14/18/22 Hz direction mapping and /ssvep/quality.
+- Kept turtlesim as the only motion target; no wheelchair or motor integration added.
+- Fixed the turtlesim bridge's ROS 2 Humble shutdown guard.
+- Removed the invalid ament_python rosdep declaration; ament_python remains the
+  package's exported build type.
+
+DEVICE DISCOVERY AND REAL EEG
+Host bluetoothctl scan: completed; no VIS_BCI / VisionBCI device found.
+First Docker Bleak scan: blocked by Docker's default AppArmor D-Bus policy.
+Corrected Docker scan: ran with the host system D-Bus mounted and only the test
+container set to apparmor=unconfined.
+Corrected Bleak result: no matching device with name prefix VIS_BCI_ found.
+Connection status: NOT ATTEMPTED - no matching real device was discovered.
+Notification subscription: NOT ATTEMPTED - no real connection existed.
+Real EEG sampling: NOT VERIFIED.
+Measured real sampling rate: NOT AVAILABLE.
+No log line claimed connection or sampling success.
+
+The standalone real driver created /eeg/raw. With no headset, both a one-message
+echo and ros2 topic hz timed out without a frame, as expected. logs/eeg_latest.txt
+contained exactly its header row and no fabricated EEG samples.
+
+OFFLINE PACKET TEST
+eeg_raw_packets.txt: not present in the repository, so a captured-packet test was
+not possible.
+Synthetic confirmed-protocol tests: PASS (3/3)
+- signed 24-bit positive, negative, and boundary decoding: PASS
+- approximately 147-byte packet / data[2:122] extraction: PASS
+- five samples, eight channels, non-zero values, scale, shape, and order: PASS
+
+PYTHON SYNTAX
+Command: python3 -m compileall (bytecode cache redirected because source mount
+was intentionally read-only)
+Result: PASS
+
+ROSDEP AND BUILD
+Command: rosdep install --from-paths src --ignore-src -r -y
+Final result: PASS - All required rosdeps installed successfully.
+
+Command: colcon build --symlink-install
+Result: PASS
+Packages built: ssvep_interfaces, ssvep_simulation
+Summary: 2 packages finished in 7.49 seconds.
+
+INSTALLED PACKAGE CHECK
+linux_eeg_driver console executable: present
+turtlesim_real_eeg.launch.py arguments: loaded successfully
+
+SIMULATED END-TO-END ROS 2 TOPIC CHECKS
+Isolation: ROS_DOMAIN_ID=77, ROS_LOCALHOST_ONLY=1, CLI echo --no-daemon
+Topics present: /eeg/raw, /ssvep/command, /ssvep/quality,
+/turtle1/cmd_vel, /turtle1/pose
+
+/eeg/raw fields: sampling_rate=250.0, channel_count=8,
+samples_per_channel=10, values length=80
+/eeg/raw simulated message rate: 24.998 messages/second
+Equivalent simulated sample rate: approximately 249.98 samples/second
+
+Observed decoded command example: detected_frequency=14.0, direction=backward,
+confidence=0.999852, valid=true
+Observed signal quality example: quality=good, snr_db=6.73604
+Observed turtlesim pose change: x=3.75244, y=5.54444
+
+The full simulated FBCCA pipeline produced all four mappings:
+10 Hz -> forward
+14 Hz -> backward
+18 Hz -> left
+22 Hz -> right
+
+TURTLESIM BRIDGE CHECKS
+forward:  linear.x=+1.0, angular.z=0.0 - PASS
+backward: linear.x=-1.0, angular.z=0.0 - PASS
+left:     linear.x=0.0, angular.z=+1.2 - PASS
+right:    linear.x=0.0, angular.z=-1.2 - PASS
+invalid command: zero velocity - PASS
+one-second command timeout: zero velocity - PASS
+Clean isolated Humble launch shutdown: PASS
+
+OVERALL
+Linux/Humble software migration, offline parsing, build, launch loading,
+simulation topics, FBCCA decoding, turtlesim motion, and safety-stop behavior:
+PASS.
+
+Real VisionBCI discovery, connection, notifications, and approximately 250 Hz
+hardware sampling: BLOCKED because the headset was not visible during either
+the host bluetoothctl scan or the corrected Docker Bleak scan.

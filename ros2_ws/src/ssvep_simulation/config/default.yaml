@@ -7,6 +7,19 @@ eeg_driver:
     noise_std: 0.35
     log_file: logs/runtime/ssvep_simulation.log.txt
 
+linux_eeg_driver:
+  ros__parameters:
+    device_name: ""
+    device_name_prefix: "VIS_BCI_"
+    device_address: ""
+    configuration_hex: ""
+    scan_timeout: 10.0
+    connect_timeout: 15.0
+    reconnect_delay: 3.0
+    notification_timeout: 3.0
+    data_file: logs/eeg_latest.txt
+    log_file: logs/runtime/linux_eeg_driver.log.txt
+
 ssvep_stimulus:
   ros__parameters:
     auto_cycle: true

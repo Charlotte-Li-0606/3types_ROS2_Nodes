@@ -2,11 +2,10 @@
 <package format="3">
   <name>ssvep_simulation</name>
   <version>0.1.0</version>
-  <description>Three-node SSVEP simulation for ROS2 Humble.</description>
+  <description>SSVEP simulation and Linux VisionBCI BLE integration for ROS2 Humble.</description>
   <maintainer email="charlotte@example.com">Charlotte Li</maintainer>
   <license>MIT</license>
 
-  <buildtool_depend>ament_python</buildtool_depend>
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
@@ -15,6 +14,8 @@
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>turtlesim</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-pip</exec_depend>
+  <exec_depend>bluez</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>

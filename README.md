@@ -1,8 +1,8 @@
 # SSVEP ROS2 Simulation
 
-这是一个面向 Ubuntu 22.04 + ROS2 Humble 的 SSVEP 全流程仿真项目。
-项目暂时不连接真实 EEG 头环，也不控制真实轮椅；它通过程序生成带噪声的模拟 EEG，
-再通过 FBCCA 风格的频率识别输出前后左右指令。
+这是一个面向 Ubuntu 22.04 + ROS2 Humble 的 SSVEP 项目。它保留了可重复的模拟 EEG
+流程，同时提供基于 Linux BlueZ 和 Python Bleak 的 VisionBCI 实机驱动。两种流程都只
+控制 ROS2 turtlesim，不连接真实轮椅或真实电机。
 
 ## 节点和话题
 
@@ -20,7 +20,7 @@ eeg_driver      ── /eeg/raw ─────────┘          ├─�
 | `ssvep_decoder` | 对 EEG 做频率识别并发布指令、置信度和质量 | `/ssvep/command`, `/ssvep/quality` |
 
 仿真中 `eeg_driver` 会订阅刺激状态，用当前频率合成 EEG。这只是为了构造可重复的
-仿真数据；接入真实 VisionBCI 头环时，`eeg_driver` 应替换为 BLE 驱动节点。
+仿真数据；实机流程使用独立的 `linux_eeg_driver`，模拟驱动仍然保留。
 
 ## Ubuntu 22.04 + ROS2 Humble 安装后运行
 
@@ -60,6 +60,112 @@ ros2 topic echo /ssvep/command
 ```bash
 ros2 topic echo /ssvep/quality
 ```
+
+## Linux VisionBCI 实机驱动
+
+实机链路如下：
+
+```text
+VisionBCI -- BLE/BlueZ --> linux_eeg_driver -- /eeg/raw --> ssvep_decoder
+  --> /ssvep/command --> turtlesim_bridge --> /turtle1/cmd_vel --> turtlesim
+```
+
+驱动只使用 Linux BlueZ 和 Python Bleak，不使用 Windows DLL、EXE 或厂商 Windows
+SDK。安装 Bleak 并构建工作区：
+
+```bash
+sudo systemctl enable --now bluetooth
+python3 -m pip install --user "bleak>=0.20"
+cd ~/3types_ROS2_Nodes/ros2_ws
+source /opt/ros/humble/setup.bash
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install
+source install/setup.bash
+cd ..
+```
+
+确认头环已开机且没有被手机或另一台电脑占用，然后启动：
+
+```bash
+ros2 launch ssvep_simulation turtlesim_real_eeg.launch.py
+```
+
+默认扫描名称以 `VIS_BCI_` 开头的设备。也可以指定完整名称或 BlueZ 地址：
+
+```bash
+ros2 launch ssvep_simulation turtlesim_real_eeg.launch.py \
+  device_name:=VIS_BCI_DFED857C
+
+ros2 launch ssvep_simulation turtlesim_real_eeg.launch.py \
+  device_address:=AA:BB:CC:DD:EE:FF
+```
+
+已确认的 BLE UUID 和数据格式：
+
+- EEG service: `f0001680-0451-4000-b000-000000000000`
+- Configuration characteristic: `f0001681-0451-4000-b000-000000000000`
+- EEG notification characteristic: `f0001682-0451-4000-b000-000000000000`
+- EEG payload 为 `data[2:122]`；每包 5 个 sample，每个 sample 8 通道；每个通道是
+  signed 24-bit big-endian，随后乘以 `0.02235`
+
+目前没有已确认的 configuration characteristic 写入内容，因此驱动默认只验证该
+characteristic 存在，不会猜测或发送配置命令。如果厂商确认了配置字节，可以显式传入，
+例如 `configuration_hex:="0102"`。不要使用未经确认的值。
+
+每个 BLE notification 发布一个 `EEGFrame`，所以 `/eeg/raw` 的消息频率预期约为
+50 Hz；每条消息包含 5 个 sample，消息中的 `sampling_rate` 是 250 Hz。驱动每 5 秒
+根据实际通知间隔计算一次 sample rate，只有收到并成功解析真实 notification 后才会
+记录“sampling verified”。
+
+实机日志：
+
+```text
+logs/eeg_latest.txt                         # 每次运行覆盖，timestamp + EEG_1..EEG_8
+logs/runtime/linux_eeg_driver.log.txt       # 发现、连接、notification、断开和采样率
+logs/runtime/ssvep_real_eeg_pipeline.log.txt
+```
+
+检查话题：
+
+```bash
+ros2 topic list
+ros2 topic echo /eeg/raw
+ros2 topic hz /eeg/raw
+ros2 topic echo /ssvep/command
+ros2 topic echo /ssvep/quality
+ros2 topic echo /turtle1/cmd_vel
+```
+
+### 在 ROS2 Humble Docker 中运行
+
+容器必须复用主机 BlueZ 的 system D-Bus；否则 Bleak 无法看到主机蓝牙控制器。GUI
+方式还要转发 X11：
+
+```bash
+docker run --rm -it --network host --security-opt apparmor=unconfined \
+  -v /run/dbus/system_bus_socket:/run/dbus/system_bus_socket \
+  -e DISPLAY="$DISPLAY" -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+  -v "$PWD":/workspace -w /workspace \
+  ros:humble-ros-base-jammy bash
+
+apt update
+apt install -y python3-colcon-common-extensions python3-rosdep python3-pip \
+  ros-humble-turtlesim
+python3 -m pip install "bleak>=0.20"
+source /opt/ros/humble/setup.bash
+cd ros2_ws
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install
+source install/setup.bash
+cd ..
+ros2 launch ssvep_simulation turtlesim_real_eeg.launch.py
+```
+
+Docker 中的 Bluetooth service 仍由主机管理；不要在容器内启动第二个 BlueZ daemon。
+Ubuntu 的 Docker AppArmor 默认策略会阻止容器向 system D-Bus 发送 BlueZ 请求，因此上面
+只对这个临时容器禁用了 AppArmor confinement；这会降低容器隔离性，不要用于不受信任的
+镜像或代码。
+如果不能转发显示器，可以用模拟 launch 做无 GUI 的节点测试，但 turtlesim 窗口不会显示。
 
 ## 脑控 turtlesim Demo
 
@@ -122,8 +228,7 @@ ros2 topic pub --once /ssvep/stimulus/select std_msgs/msg/String "{data: '{\"fre
 - `ssvep_interfaces/msg/SSVEPCommand`：方向、识别频率、置信度、是否有效。
 - `ssvep_interfaces/msg/SignalQuality`：SNR、信号 RMS、噪声 RMS 和质量等级。
 
-## 仿真边界
+## 安全边界
 
-本项目输出的是轮椅控制程序可以订阅的高层方向指令，不直接连接轮椅电机。
-后续可以增加一个 ROS2 bridge，将 `/ssvep/command` 转换为 `geometry_msgs/msg/Twist`
-并发布到实际底盘使用的话题。
+本项目的 `turtlesim_bridge` 只发布到 `/turtle1/cmd_vel`。它不会连接真实轮椅、真实
+底盘或真实电机；无效指令和超过 1 秒未更新的指令都会发布零速度。

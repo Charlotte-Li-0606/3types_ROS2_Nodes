@@ -14,15 +14,17 @@ setup(
             [
                 "launch/simulation.launch.py",
                 "launch/turtlesim_demo.launch.py",
+                "launch/turtlesim_real_eeg.launch.py",
             ],
         ),
         (f"share/{package_name}/config", ["config/default.yaml"]),
     ],
-    install_requires=["setuptools", "numpy"],
+    install_requires=["setuptools", "numpy", "bleak>=0.20"],
     zip_safe=True,
     entry_points={
         "console_scripts": [
             "eeg_driver = ssvep_simulation.eeg_driver:main",
+            "linux_eeg_driver = ssvep_simulation.linux_eeg_driver:main",
             "ssvep_stimulus = ssvep_simulation.ssvep_stimulus:main",
             "ssvep_decoder = ssvep_simulation.ssvep_decoder:main",
             "turtlesim_bridge = ssvep_simulation.turtlesim_bridge:main",
