@@ -19,6 +19,7 @@ setup(
                 "launch/turtlesim_accuracy_backward.launch.py",
                 "launch/turtlesim_accuracy_left.launch.py",
                 "launch/turtlesim_accuracy_right.launch.py",
+                "launch/whill_bridge.launch.py",
             ],
         ),
         (f"share/{package_name}/config", ["config/default.yaml"]),
@@ -33,6 +34,7 @@ setup(
             "ssvep_visual_stimulus = ssvep_simulation.ssvep_visual_stimulus:main",
             "ssvep_decoder = ssvep_simulation.ssvep_decoder:main",
             "turtlesim_bridge = ssvep_simulation.turtlesim_bridge:main",
+            "ssvep_whill_bridge = ssvep_simulation.ssvep_whill_bridge:main",
         ],
     },
 )

@@ -278,7 +278,111 @@ ros2 topic pub --once /ssvep/stimulus/select std_msgs/msg/String "{data: '{\"fre
 - `ssvep_interfaces/msg/SSVEPCommand`：方向、识别频率、置信度、是否有效。
 - `ssvep_interfaces/msg/SignalQuality`：SNR、信号 RMS、噪声 RMS 和质量等级。
 
+## SSVEP WHILL ROS2 bridge（仅抽象控制话题）
+
+节点 `ssvep_whill_bridge` 将经过安全筛选的 SSVEP 方向转换为 JSON 字符串。它不连接
+WHILL 硬件、电机控制器或其他物理执行器。
+
+```text
+/ssvep/command  (ssvep_interfaces/msg/SSVEPCommand) --+
+                                                        +--> ssvep_whill_bridge
+/ssvep/quality  (ssvep_interfaces/msg/SignalQuality) ---+          |
+                                                                   v
+                                             /whill/controller/bci_input
+                                             (std_msgs/msg/String JSON)
+```
+
+输出 QoS 为 `RELIABLE`、`VOLATILE`、`KEEP_LAST`、depth `10`。方向 JSON 示例：
+
+```json
+{"sequence":1,"stamp_ns":1786000000000000000,"command":"direction","direction":"forward","confidence":0.91,"valid":true,"quality":"good"}
+```
+
+停车 JSON 示例：
+
+```json
+{"sequence":2,"stamp_ns":1786000000500000000,"command":"stop","reason":"low_confidence"}
+```
+
+默认安全参数：
+
+- `min_confidence: 0.75`
+- `required_consecutive_results: 2`
+- `command_timeout_sec: 1.0`
+- `allowed_quality: [fair, good]`
+
+只有 `valid=true`、置信度不低于阈值、质量为 `fair/good` 且方向为
+`forward/backward/left/right` 时才可接受方向。首次方向和方向切换都需要两个连续一致
+结果；已接受的相同方向会随每条有效输入重复发布，用作连续状态刷新，不会转换为固定距离
+移动。`idle`、显式 `stop`、无效方向、低置信度、`poor/unknown` 质量和 1 秒超时都会输出
+停车。节点以停车状态启动，并在正常退出时尽可能再发布一次 `bridge_shutdown` 停车消息。
+所有输入触发消息都使用 `SSVEPCommand.header.stamp`；超时和其他桥接安全事件使用 ROS
+clock，序号从 1 开始并对每条输出严格加 1。
+
+构建并启动：
+
+```bash
+cd ~/3types_ROS2_Nodes/ros2_ws
+source /opt/ros/humble/setup.bash
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install
+source install/setup.bash
+cd ..
+ros2 launch ssvep_simulation whill_bridge.launch.py
+```
+
+也可以直接运行，并在另一终端查看 JSON：
+
+```bash
+ros2 run ssvep_simulation ssvep_whill_bridge
+ros2 topic echo /whill/controller/bci_input
+```
+
+先发布质量，再发布两次相同方向（首次方向需要两个连续结果）：
+
+```bash
+ros2 topic pub --once /ssvep/quality \
+  ssvep_interfaces/msg/SignalQuality \
+  "{snr_db: 8.0, signal_rms: 1.0, noise_rms: 0.3, quality: good}"
+
+ros2 topic pub --rate 2 --times 2 /ssvep/command \
+  ssvep_interfaces/msg/SSVEPCommand \
+  "{header: {stamp: {sec: 1786000000, nanosec: 123}}, direction: forward, detected_frequency: 10.0, confidence: 0.91, valid: true}"
+```
+
+预期第二条结果后出现 `command="direction"`、`direction="forward"`。以下命令分别验证
+低置信度、差质量、无效结果和 idle 停车；每条命令应在输出 JSON 中产生对应 `reason`：
+
+```bash
+# low_confidence
+ros2 topic pub --once /ssvep/command ssvep_interfaces/msg/SSVEPCommand \
+  "{direction: forward, confidence: 0.50, valid: true}"
+
+# poor_signal_quality（先更新质量，再发送高置信度方向）
+ros2 topic pub --once /ssvep/quality ssvep_interfaces/msg/SignalQuality \
+  "{snr_db: -5.0, signal_rms: 0.2, noise_rms: 1.0, quality: poor}"
+ros2 topic pub --once /ssvep/command ssvep_interfaces/msg/SSVEPCommand \
+  "{direction: forward, confidence: 0.91, valid: true}"
+
+# ssvep_invalid
+ros2 topic pub --once /ssvep/command ssvep_interfaces/msg/SSVEPCommand \
+  "{direction: forward, confidence: 0.91, valid: false}"
+
+# ssvep_idle（idle 优先于 valid 字段）
+ros2 topic pub --once /ssvep/command ssvep_interfaces/msg/SSVEPCommand \
+  "{direction: idle, confidence: 0.0, valid: false}"
+```
+
+恢复 `good` 质量并接受一个方向后停止发布 `/ssvep/command`，等待超过 1 秒，应出现
+`reason="command_timeout"`。独立运行日志写入：
+
+```text
+logs/runtime/ssvep_whill_bridge.log.txt
+```
+
 ## 安全边界
 
 本项目的 `turtlesim_bridge` 只发布到 `/turtle1/cmd_vel`。它不会连接真实轮椅、真实
 底盘或真实电机；无效指令和超过 1 秒未更新的指令都会发布零速度。
+`ssvep_whill_bridge` 同样只发布抽象 JSON 字符串，不包含 WHILL SDK、串口、CAN、蓝牙
+轮椅连接或固定距离移动命令。
