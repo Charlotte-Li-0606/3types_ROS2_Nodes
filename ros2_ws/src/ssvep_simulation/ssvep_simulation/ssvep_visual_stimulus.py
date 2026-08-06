@@ -1,5 +1,6 @@
-"""Four-target visual SSVEP stimulus for the real EEG turtlesim demo."""
+"""Single- or four-target visual SSVEP stimulus for turtlesim demos."""
 
+import signal
 import time
 import tkinter as tk
 
@@ -18,13 +19,24 @@ TARGETS = (
 
 
 class SSVEPVisualStimulus(Node):
-    """Display four phase-driven flashing panels and publish their run state."""
+    """Display phase-driven flashing panels and publish their run state."""
 
     def __init__(self):
         super().__init__("ssvep_visual_stimulus")
 
         geometry = str(
-            self.declare_parameter("geometry", "760x760+20+100").value
+            self.declare_parameter("geometry", "1080x820+20+100").value
+        )
+        requested_frequency = float(
+            self.declare_parameter("target_frequency", 0.0).value
+        )
+        self._panel_gap = max(
+            0, int(self.declare_parameter("panel_gap", 80).value)
+        )
+        self._targets = self._select_targets(requested_frequency)
+        self._single_target = len(self._targets) == 1
+        self._target_frequency = (
+            self._targets[0][0] if self._single_target else 0.0
         )
         self._active = bool(
             self.declare_parameter("start_active", False).value
@@ -40,9 +52,16 @@ class SSVEPVisualStimulus(Node):
         self._closed = False
 
         self._root = tk.Tk()
-        self._root.title("SSVEP Visual Targets - VisionBCI Turtlesim")
+        if self._single_target:
+            frequency, direction, _location = self._targets[0]
+            title = f"SSVEP Accuracy Test - {direction} - {frequency:.0f} Hz"
+            self._mode_description = f"TEST: {direction} / {frequency:.0f} Hz"
+        else:
+            title = "SSVEP Visual Targets - VisionBCI Turtlesim"
+            self._mode_description = "4-TARGET CONTROL"
+        self._root.title(title)
         self._root.geometry(geometry)
-        self._root.minsize(620, 620)
+        self._root.minsize(700, 620)
         self._root.configure(background="#20242b")
         self._root.protocol("WM_DELETE_WINDOW", self._close)
         self._root.bind("<space>", self._toggle)
@@ -73,16 +92,25 @@ class SSVEPVisualStimulus(Node):
         )
         self._toggle_button.grid(row=0, column=1, sticky="e")
 
-        target_grid = tk.Frame(self._root, background="#59616d", padx=3, pady=3)
+        target_grid = tk.Frame(self._root, background="#20242b", padx=3, pady=3)
         target_grid.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 6))
-        for row in range(2):
-            target_grid.grid_rowconfigure(row, weight=1, uniform="target")
-        for column in range(2):
-            target_grid.grid_columnconfigure(column, weight=1, uniform="target")
+
+        if self._single_target:
+            target_grid.grid_rowconfigure(0, weight=1)
+            target_grid.grid_columnconfigure(0, weight=1)
+            grid_positions = ((0, 0),)
+        else:
+            target_grid.grid_rowconfigure(0, weight=1, uniform="target")
+            target_grid.grid_rowconfigure(1, minsize=self._panel_gap)
+            target_grid.grid_rowconfigure(2, weight=1, uniform="target")
+            target_grid.grid_columnconfigure(0, weight=1, uniform="target")
+            target_grid.grid_columnconfigure(1, minsize=self._panel_gap)
+            target_grid.grid_columnconfigure(2, weight=1, uniform="target")
+            grid_positions = ((0, 0), (0, 2), (2, 0), (2, 2))
 
         self._panels = {}
-        for index, (frequency, direction, location) in enumerate(TARGETS):
-            row, column = divmod(index, 2)
+        for target, (row, column) in zip(self._targets, grid_positions):
+            frequency, direction, location = target
             panel = tk.Frame(
                 target_grid,
                 background="#080808",
@@ -93,12 +121,15 @@ class SSVEPVisualStimulus(Node):
                 row=row,
                 column=column,
                 sticky="nsew",
-                padx=3,
-                pady=3,
+                padx=self._panel_gap if self._single_target else 3,
+                pady=max(30, self._panel_gap // 2) if self._single_target else 3,
+            )
+            target_note = (
+                "Single visible target" if self._single_target else location
             )
             label = tk.Label(
                 panel,
-                text=f"{direction}\n{frequency:.0f} Hz\n{location}",
+                text=f"{direction}\n{frequency:.0f} Hz\n{target_note}",
                 font=("DejaVu Sans", 22, "bold"),
                 justify="center",
                 background="#080808",
@@ -123,6 +154,18 @@ class SSVEPVisualStimulus(Node):
         self._update_controls()
         self._root.after(0, self._render)
 
+    @staticmethod
+    def _select_targets(requested_frequency):
+        if requested_frequency <= 0.0:
+            return TARGETS
+        for target in TARGETS:
+            if abs(target[0] - requested_frequency) < 0.01:
+                return (target,)
+        allowed = ", ".join(f"{target[0]:.0f}" for target in TARGETS)
+        raise ValueError(
+            f"target_frequency must be 0 (all targets) or one of: {allowed} Hz"
+        )
+
     def _toggle(self, _event=None):
         self._active = not self._active
         self._phase_start = time.perf_counter()
@@ -138,14 +181,19 @@ class SSVEPVisualStimulus(Node):
     def _update_controls(self):
         if self._active:
             self._status_label.configure(
-                text="FLASHING ACTIVE", foreground="#79e08c"
+                text=f"{self._mode_description} — FLASHING ACTIVE",
+                foreground="#79e08c",
             )
             self._toggle_button.configure(
                 text="PAUSE", background="#f2b35f", activebackground="#ffc978"
             )
         else:
             self._status_label.configure(
-                text="PAUSED — press SPACE when recording", foreground="#ffcc66"
+                text=(
+                    f"{self._mode_description} — PAUSED\n"
+                    "Press SPACE when recording"
+                ),
+                foreground="#ffcc66",
             )
             self._toggle_button.configure(
                 text="START FLASHING",
@@ -159,7 +207,7 @@ class SSVEPVisualStimulus(Node):
 
         now = time.perf_counter()
         elapsed = now - self._phase_start
-        for frequency, _direction, _location in TARGETS:
+        for frequency, _direction, _location in self._targets:
             is_bright = self._active and (
                 int(elapsed * frequency * 2.0) % 2 == 0
             )
@@ -180,8 +228,8 @@ class SSVEPVisualStimulus(Node):
         message = StimulusState()
         message.header.stamp = self.get_clock().now().to_msg()
         message.header.frame_id = "visual_ssvep_targets"
-        message.frequency = 0.0
-        message.mode = "multi_target"
+        message.frequency = self._target_frequency
+        message.mode = "single_target" if self._single_target else "multi_target"
         message.active = self._active
         self._publisher.publish(message)
 
@@ -200,6 +248,8 @@ class SSVEPVisualStimulus(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = SSVEPVisualStimulus()
+    signal.signal(signal.SIGINT, lambda _signum, _frame: node._close())
+    signal.signal(signal.SIGTERM, lambda _signum, _frame: node._close())
     try:
         node.run()
     except KeyboardInterrupt:

@@ -101,6 +101,37 @@ ros2 launch ssvep_simulation turtlesim_real_eeg.launch.py
 | `18 Hz / LEFT` | left |
 | `22 Hz / RIGHT` | right |
 
+四个单目标准确率测试每次只显示一个闪烁目标，并为每个方向保存独立 EEG 和运行日志。
+`8 Hz` 只是示例，不在当前 decoder 的候选频率中；准确率测试继续使用与 FBCCA 和控制映射
+一致的 `10/14/18/22 Hz`。每次只运行下面一个 launch，结束后按 `Ctrl-C`，再启动下一个：
+
+```bash
+# 10 Hz -> forward
+ros2 launch ssvep_simulation turtlesim_accuracy_forward.launch.py
+
+# 14 Hz -> backward
+ros2 launch ssvep_simulation turtlesim_accuracy_backward.launch.py
+
+# 18 Hz -> left
+ros2 launch ssvep_simulation turtlesim_accuracy_left.launch.py
+
+# 22 Hz -> right
+ros2 launch ssvep_simulation turtlesim_accuracy_right.launch.py
+```
+
+四个 launch 都接受与实机 launch 相同的 `device_name`、`device_address` 等参数。例如：
+
+```bash
+ros2 launch ssvep_simulation turtlesim_accuracy_forward.launch.py \
+  device_name:=VIS_BCI_DFED857C
+```
+
+启动后按 `SPACE` 开始单目标闪烁，同时观察 `/ssvep/command`。decoder 仍然根据 EEG
+计算四个候选频率的 FBCCA 分数，不会把屏幕已知频率直接当作识别结果。实机 launch 的
+综合四目标窗口扩大为 `1080x820`，目标间保留 80 像素空白区，减少相邻目标的视觉干扰。
+real-EEG launch 还会把 turtle 初始化在中心并朝上，因此 forward/backward 在屏幕上表现
+为向上/向下运动。
+
 按 `ESC` 或再次按 `SPACE` 会暂停闪烁并停止 turtle。快速闪光可能引起光敏反应；有
 光敏性癫痫风险的人不要运行视觉刺激。软件目标频率由单调时钟生成，但正式实验仍应使用
 光电二极管测量显示器实际刷新时序，不能把未测量的显示时序当作临床级校准结果。
@@ -136,6 +167,10 @@ characteristic 存在，不会猜测或发送配置命令。如果厂商确认�
 
 ```text
 logs/eeg_latest.txt                         # 每次运行覆盖，timestamp + EEG_1..EEG_8
+logs/eeg_accuracy_forward.txt               # 10 Hz 单目标测试
+logs/eeg_accuracy_backward.txt              # 14 Hz 单目标测试
+logs/eeg_accuracy_left.txt                  # 18 Hz 单目标测试
+logs/eeg_accuracy_right.txt                 # 22 Hz 单目标测试
 logs/runtime/linux_eeg_driver.log.txt       # 发现、连接、notification、断开和采样率
 logs/runtime/ssvep_real_eeg_pipeline.log.txt
 ```

@@ -3,6 +3,7 @@ ros2_ws/install/
 ros2_ws/log/
 logs/runtime/
 logs/eeg_latest.txt
+logs/eeg_accuracy_*.txt
 __pycache__/
 *.pyc
 .pytest_cache/

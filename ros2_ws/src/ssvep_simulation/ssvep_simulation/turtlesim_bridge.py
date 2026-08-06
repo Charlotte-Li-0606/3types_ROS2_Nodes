@@ -10,6 +10,7 @@ import time
 import rclpy
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
+from turtlesim.srv import TeleportAbsolute
 
 from ssvep_interfaces.msg import SSVEPCommand
 
@@ -34,6 +35,18 @@ class TurtlesimBridge(Node):
         self._command_timeout = float(
             self.declare_parameter("command_timeout", 1.0).value
         )
+        self._initialize_pose = bool(
+            self.declare_parameter("initialize_pose", False).value
+        )
+        self._initial_x = float(
+            self.declare_parameter("initial_x", 5.544445).value
+        )
+        self._initial_y = float(
+            self.declare_parameter("initial_y", 5.544445).value
+        )
+        self._initial_theta = float(
+            self.declare_parameter("initial_theta", 1.57079632679).value
+        )
         log_file = self.declare_parameter(
             "log_file", "logs/runtime/ssvep_simulation.log.txt"
         ).value
@@ -45,6 +58,7 @@ class TurtlesimBridge(Node):
         self._latest_confidence = 0.0
         self._last_command_time = 0.0
         self._last_published_direction = None
+        self._initial_pose_future = None
 
         self._publisher = self.create_publisher(
             Twist, "/turtle1/cmd_vel", 10
@@ -59,11 +73,52 @@ class TurtlesimBridge(Node):
             1.0 / max(self._publish_rate, 1.0),
             self._publish_velocity,
         )
+        self._initial_pose_timer = None
+        if self._initialize_pose:
+            self._teleport_client = self.create_client(
+                TeleportAbsolute, "/turtle1/teleport_absolute"
+            )
+            self._initial_pose_timer = self.create_timer(
+                0.25, self._request_initial_pose
+            )
 
         message = (
             f"started; publishing /turtle1/cmd_vel at "
             f"{self._publish_rate:.1f} Hz; timeout={self._command_timeout:.1f}s; "
             f"log={self._log_path}"
+        )
+        self.get_logger().info(message)
+        self._file_logger.info(message)
+
+    def _request_initial_pose(self):
+        if self._initial_pose_future is not None:
+            return
+        if not self._teleport_client.service_is_ready():
+            return
+
+        request = TeleportAbsolute.Request()
+        request.x = self._initial_x
+        request.y = self._initial_y
+        request.theta = self._initial_theta
+        self._initial_pose_future = self._teleport_client.call_async(request)
+        self._initial_pose_future.add_done_callback(self._initial_pose_response)
+
+    def _initial_pose_response(self, future):
+        try:
+            future.result()
+        except Exception as exc:
+            self._initial_pose_future = None
+            self.get_logger().warning(
+                f"initial turtle pose request failed; retrying: {exc}"
+            )
+            return
+
+        if self._initial_pose_timer is not None:
+            self._initial_pose_timer.cancel()
+        message = (
+            "initialized turtle pose: "
+            f"x={self._initial_x:.3f}, y={self._initial_y:.3f}, "
+            f"theta={self._initial_theta:.3f} rad"
         )
         self.get_logger().info(message)
         self._file_logger.info(message)

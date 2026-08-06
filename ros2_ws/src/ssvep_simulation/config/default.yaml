@@ -23,7 +23,9 @@ linux_eeg_driver:
 ssvep_visual_stimulus:
   ros__parameters:
     start_active: false
-    geometry: "760x760+20+100"
+    target_frequency: 0.0
+    geometry: "1080x820+20+100"
+    panel_gap: 80
     render_interval_ms: 4
 
 ssvep_stimulus:

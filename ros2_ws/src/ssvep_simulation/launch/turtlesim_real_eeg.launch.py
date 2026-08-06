@@ -4,6 +4,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -14,6 +15,9 @@ def generate_launch_description():
     data_file = LaunchConfiguration("data_file")
     driver_log_file = LaunchConfiguration("driver_log_file")
     pipeline_log_file = LaunchConfiguration("pipeline_log_file")
+    visual_target_frequency = LaunchConfiguration("visual_target_frequency")
+    visual_geometry = LaunchConfiguration("visual_geometry")
+    visual_panel_gap = LaunchConfiguration("visual_panel_gap")
 
     return LaunchDescription(
         [
@@ -55,6 +59,23 @@ def generate_launch_description():
                 default_value="logs/runtime/ssvep_real_eeg_pipeline.log.txt",
                 description="Decoder and turtlesim bridge runtime log",
             ),
+            DeclareLaunchArgument(
+                "visual_target_frequency",
+                default_value="0.0",
+                description=(
+                    "0 shows all targets; 10, 14, 18, or 22 shows one target"
+                ),
+            ),
+            DeclareLaunchArgument(
+                "visual_geometry",
+                default_value="1080x820+20+100",
+                description="Tk geometry for the visual stimulus window",
+            ),
+            DeclareLaunchArgument(
+                "visual_panel_gap",
+                default_value="80",
+                description="Blank-pixel separation between visual targets",
+            ),
             Node(
                 package="ssvep_simulation",
                 executable="ssvep_visual_stimulus",
@@ -63,7 +84,13 @@ def generate_launch_description():
                 parameters=[
                     {
                         "start_active": False,
-                        "geometry": "760x760+20+100",
+                        "target_frequency": ParameterValue(
+                            visual_target_frequency, value_type=float
+                        ),
+                        "geometry": visual_geometry,
+                        "panel_gap": ParameterValue(
+                            visual_panel_gap, value_type=int
+                        ),
                         "render_interval_ms": 4,
                     }
                 ],
@@ -120,6 +147,10 @@ def generate_launch_description():
                         "angular_speed": 1.2,
                         "publish_rate": 10.0,
                         "command_timeout": 1.0,
+                        "initialize_pose": True,
+                        "initial_x": 5.544445,
+                        "initial_y": 5.544445,
+                        "initial_theta": 1.57079632679,
                         "log_file": pipeline_log_file,
                     }
                 ],
