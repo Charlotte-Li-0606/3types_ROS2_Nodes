@@ -1,0 +1,177 @@
+SSVEP REAL-EEG ACCURACY SUMMARY — DRAFT FOR USER REVIEW
+=======================================================
+
+Status
+------
+Draft created: 2026-08-06 (Asia/Hong_Kong)
+Git branch: linux-humble-real-eeg
+Demo-code commit already present on GitHub: 64cbe77
+This report has NOT been committed or pushed.
+
+Purpose
+-------
+Evaluate the four single-target mini demos with the real VisionBCI EEG stream,
+then check whether the four-target demo was ready for a recorded control test.
+The screen target was never copied into the decoded result: FBCCA continued to
+classify all four candidate frequencies from EEG.
+
+Test environment
+----------------
+- Host display: 1920 x 1200 at 59.88 Hz
+- Runtime: Ubuntu 22.04 / ROS2 Humble Docker container
+- EEG device: VIS_BCI_DFED857C
+- BLE connection: verified before testing
+- EEG sampling: approximately 249.99 samples/second
+- EEG channels: 8
+- EEG ROS packet rate: approximately 50 packets/second, 5 samples per packet
+- Decoder window: 3.0-second rolling window
+- Decoder analysis period: 0.5 seconds
+- Decoder minimum relative confidence: 0.40
+- turtlesim Twist publication rate: 10 Hz
+- Command timeout: 1.0 second
+
+Direction mapping
+-----------------
+10 Hz -> forward  -> linear.x = +1.0
+14 Hz -> backward -> linear.x = -1.0
+18 Hz -> left     -> angular.z = +1.2
+22 Hz -> right    -> angular.z = -1.2
+
+Procedure
+---------
+1. Maintain one verified BLE connection and one decoder/bridge/turtlesim
+   pipeline throughout the test.
+2. Display only one visual target at a time.
+3. Center turtlesim and set theta = pi/2 before each stage, so forward and
+   backward appear as up and down on screen.
+4. Command each single-target stimulus to flash for 10 seconds in this order:
+   forward, backward, left, right.
+5. Pause between stages and replace only the visual-stimulus process, keeping
+   the BLE stream connected.
+6. Stop before the planned 15-second four-target stage after the operator
+   observed that most stages moved the turtle forward.
+
+Observed result
+---------------
+The operator's observation was correct: the decoder strongly favored 10 Hz,
+so turtlesim moved mostly forward even during the 14, 18, and 22 Hz stages.
+The bridge mapping was not swapped; it correctly converted the decoder's
+reported direction into Twist. The incorrect result originated upstream in
+frequency classification.
+
+Diagnostic logged-snapshot confusion summary
+---------------------------------------------
+Expected  Logged classifications        Correct / total   Snapshot accuracy
+10 Hz     10 Hz: 2                      2 / 2              100.0%
+14 Hz     10 Hz: 15, 14 Hz: 3          3 / 18              16.7%
+18 Hz     10 Hz: 10                    0 / 10               0.0%
+22 Hz     10 Hz: 7, 14 Hz: 2           0 / 9                0.0%
+Pooled                                  5 / 39              12.8%
+
+Important limitation: these percentages are diagnostic snapshot rates, not a
+formal accuracy estimate. The decoder writes one detailed result only every
+four analyses (about every 2 seconds), no rosbag captured every
+/ssvep/command, and the number of logged snapshots differed between stages.
+The 10-second timer was issued by the test controller, but stimulus-frame
+timing was not independently measured with a photodiode.
+
+Signal quality during the snapshots
+-----------------------------------
+Expected target    Reported SNR range
+10 Hz              -30.40 to -21.21 dB
+14 Hz              -31.15 to -19.66 dB
+18 Hz              -32.64 to -21.01 dB
+22 Hz              -31.53 to -19.34 dB
+
+Every detailed result was labelled "poor" signal quality. Nevertheless, the
+mean relative softmax confidence was 0.535 and many results exceeded the 0.40
+movement threshold. Relative confidence therefore did not prevent movement
+when every candidate had weak absolute evidence.
+
+Checks that passed
+------------------
+- The VisionBCI device was connected and delivered continuous real EEG.
+- Sampling stayed close to 250 Hz.
+- The four mini demos displayed the requested single targets:
+  10 Hz forward, 14 Hz backward, 18 Hz left, and 22 Hz right.
+- /ssvep/stimulus correctly reported the visible target as metadata.
+- The decoder still computed its result from EEG rather than stimulus metadata.
+- turtlesim started centered and facing upward.
+- Invalid, inactive, and timed-out commands produced zero velocity.
+- The bridge applied the required linear/angular direction mapping correctly.
+- Ubuntu 22.04 / ROS2 Humble colcon build passed.
+- Six Python tests passed.
+
+Checks that failed or were not completed
+----------------------------------------
+- The 14, 18, and 22 Hz single-target tests did not classify reliably.
+- A formal per-decision confusion matrix was not available because every
+  /ssvep/command was not recorded.
+- Actual optical stimulus timing was not measured with a photodiode.
+- Per-user resting baseline and frequency calibration were not performed.
+- The final 15-second four-target test was deliberately not started after the
+  low-frequency classification bias became clear.
+
+Possible causes
+---------------
+1. Poor real EEG signal quality
+   All test snapshots had strongly negative SNR. Electrode contact, placement,
+   reference quality, motion, muscle activity, ambient electrical noise, or
+   visual attention may have contributed. These possibilities were not
+   isolated during this run.
+
+2. Endogenous alpha-band interference
+   Spontaneous human alpha activity is commonly present around 8-13 Hz. The
+   10 Hz command overlaps that band and can therefore produce false positives,
+   especially without an individual resting-baseline correction.
+
+3. Display timing
+   The laptop refreshes at 59.88 Hz. The current binary wall-clock stimulus can
+   represent 10 Hz particularly cleanly (about six display frames per cycle),
+   while 14, 18, and 22 Hz require uneven frame timing. Tkinter is not locked
+   to vertical refresh, and actual light output was not measured.
+
+4. Unequal harmonic coverage in the current FBCCA-style filter bank
+   The 6-45 Hz wide band retains three harmonics for 10 Hz (10/20/30) and
+   14 Hz (14/28/42), but removes the third harmonic for 18 Hz (54 Hz) and
+   22 Hz (66 Hz). The high-weight 8-15 Hz sub-band also favors low-frequency
+   evidence. A deterministic synthetic test still selected all four clean
+   targets, but its target scores were about 0.992 for 10/14 Hz, 0.568 for
+   18 Hz, and 0.709 for 22 Hz, demonstrating unequal score strength.
+
+5. Relative confidence without an absolute-quality gate
+   The softmax confidence compares candidates with one another. It can be high
+   when the best candidate is merely less poor than the other three. The
+   bridge currently accepts such a result even when quality is "poor".
+
+6. Rolling-window carry-over
+   The decoder continuously retains the latest 3 seconds of EEG. It does not
+   clear the window when a new visual stage begins, so the beginning of each
+   10-second stage contains resting or previous-stage data.
+
+7. No temporal confirmation
+   One classification above 0.40 can change direction. The controller does not
+   yet require several consecutive agreeing decisions or apply hysteresis.
+
+Recommended corrections before another control video
+----------------------------------------------------
+1. Record a no-motion calibration session and check electrode/contact quality.
+2. Record /eeg/raw, /ssvep/stimulus, /ssvep/command, /ssvep/quality, and
+   /turtle1/cmd_vel in a rosbag for a complete confusion matrix.
+3. Clear the EEG window at stimulus onset and collect a fresh labelled trial.
+4. Add an absolute SNR/quality threshold and consecutive-decision confirmation;
+   poor-quality classifications must command stop.
+5. Redesign the FBCCA filter bank so every target receives equal harmonic
+   coverage, then add noisy synthetic regression tests for all four targets.
+6. Use a refresh-synchronized visual renderer and verify optical frequency with
+   a photodiode, or select frequencies compatible with the measured refresh.
+7. Run a per-user frequency sweep without motion and choose four frequencies
+   with strong, distinct SNR while avoiding a high resting-alpha baseline.
+8. Repeat the four single-target trials before enabling the combined demo.
+
+Integrity statement
+-------------------
+The known single-target frequency was used only as the expected label for this
+summary. It was not used to force the decoded result or turtle direction. No
+real wheelchair, motor, or other physical actuator was connected.
+
